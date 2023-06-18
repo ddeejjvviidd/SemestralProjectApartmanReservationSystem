@@ -1,9 +1,10 @@
 package ReservationSystem.UI;
 
+import ReservationSystem.Core.BlockedDate;
 import ReservationSystem.Tools.ConsoleTools;
 import ReservationSystem.Tools.DateTools;
 import ReservationSystem.Core.Reservation;
-import ReservationSystem.Core.ReservationData;
+import ReservationSystem.Core.ReservationsHandler;
 import java.io.IOException;
 
 import java.time.LocalDate;
@@ -11,31 +12,75 @@ import java.util.Scanner;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
+/**
+ * 
+ * @author david
+ */
 public class RESYapp {
-
-    private static ReservationData database = new ReservationData();
-    public static Scanner sc = new Scanner(System.in);
-    private static int endOfBooking = DateTools.toExcelFormat(31, 12, 2024);
+    
+    private static Scanner sc = new Scanner(System.in);
+    
+    private static ReservationsHandler database;
+    private static int endOfBooking;
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy");
-
-    private static boolean isLoggedAsAdmin = false;
-    private static boolean isLoggedAsUser = false;
-
-    private static String uName = "";
-    private static String uSurname = "";
-    private static String uID = "";
-    private static String uEmail = "";
-
+    
+    private static boolean isLoggedAsAdmin;
+    private static boolean isLoggedAsUser;
+    
+    private static String uName;
+    private static String uSurname;
+    private static String uID;
+    private static String uEmail;
+    
     private static List<Reservation> userReservations;
+    
+    /**
+     * Konstruktor tridy RESYapp.
+     */
+    public RESYapp(){
+        database = new ReservationsHandler();
+        endOfBooking = DateTools.toExcelFormat(LocalDate.now()) + 365;
+        //endOfBooking = DateTools.toExcelFormat(31, 12, 2025);
+        
+        isLoggedAsAdmin = false;
+        isLoggedAsUser = false;
+        
+        uName = "";
+        uSurname = "";
+        uID = "";
+        uEmail = "";
+    }
+    
+    /**
+     * Spusti logiku programu v debug modu.
+     * @return
+     * @throws IOException 
+     */
+    public static Boolean testDebugRun() throws IOException {
+//        throw new IOException("Testovani, testovaanii.");
+//        database.loadBlockedDates();
+//        return true;
+        for (int i = 0; i < 10; i++) {
+            System.out.println(database.generateFileName());
+        }
+        return true;
+    }
 
-    public static void main(String[] args) {
-
+    /**
+     * Spousti logiku hlavniho menu, kde je umozneno vytvaret rezervace a pristupovat do sekci Admin a Moje rezervace.
+     * @return
+     * @throws IOException 
+     */
+    public static Boolean runProgram() throws IOException {
         boolean exit = false;
 
         try {
             database.loadReservations();
             database.sortReservations();
-        } catch (Exception e) {
+
+            database.loadBlockedDates();
+            database.sortBlockedDates();
+        } catch (IOException e) {
             System.out.println("ERROR: Chyba pri cteni ze souboru: " + e.getMessage());
         }
 
@@ -92,7 +137,7 @@ public class RESYapp {
                 }
             } else {
                 System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
-                String invalidInput = sc.nextLine();
+                sc.nextLine();
                 System.out.println("Neplatna volba, zvolte znovu.");
             }
 
@@ -102,15 +147,20 @@ public class RESYapp {
         //konec programu
         try {
             database.saveAndOverwriteReservations();
-        } catch (Exception e) {
+            database = null;
+            return true;
+        } catch (IOException e) {
             System.out.println("Chyba pri ukladani rezervaci: " + e.getMessage());
+            return false;
         }
-
     }
 
     //vypisy menu --------------------------------------------------------------
     
-    public static void printMainMenu() {
+    /**
+     * Vypisuje hlavni menu.
+     */
+    private static void printMainMenu() {
         System.out.println("==== Rezervacni system ubytovani ====");
         if (isLoggedAsAdmin) {
             System.out.println("Jste prihlasen jako administrator");
@@ -127,7 +177,10 @@ public class RESYapp {
         ConsoleTools.input();
     }
 
-    public static void printMyReservationMenu() {
+    /**
+     * Vypisuje menu moje rezervace.
+     */
+    private static void printMyReservationMenu() {
         System.out.println("=========== Moje rezervace ==========");
         if (isLoggedAsUser) {
             System.out.printf("Overeny uzivatel: %s %s\n", uName, uSurname);
@@ -143,21 +196,32 @@ public class RESYapp {
         ConsoleTools.input();
     }
 
-    public static void printAdminMenu() {
+    /**
+     * Vypisuje admin menu.
+     */
+    private static void printAdminMenu() {
         System.out.println("============= Admin menu ============");
         System.out.println("1. Vypsat vsechny rezervace");
-        System.out.println("2. Vypsat vsechny rezervace se surovymi daty");
-        System.out.println("3. Vypsat vsechny rezervace ve formatu dat v CSV");
-        System.out.println("4. Smazat rezervaci");
-        System.out.println("5. Odhlasit se");
+        System.out.println("2. Vypsat vsechny rezervace ve formatu dat v CSV");
+        System.out.println("3. Export vsech rezervaci");
+        System.out.println("4. Export vsech rezervaci do binarniho souboru");
+        System.out.println("5. Smazat rezervaci");
+        System.out.println("6. Vypsat zablokovane terminy");
+        System.out.println("7. Zablokovani terminu");
+        System.out.println("8. Odblokovani terminu");
+        System.out.println("9. Odhlasit se");
         System.out.println("0. Zpet do hlavniho menu");
         System.out.println("=====================================");
         ConsoleTools.input();
     }
-    
-    //logika menu --------------------------------------------------------------
 
-    public static boolean userAuth() {
+    //logika menu --------------------------------------------------------------
+    
+    /**
+     * Nacte od uzivatele osobni udaje, vyhleda, zda se shoduji z nejakou rezervaci, list nalezenych rezervaci ulozi do userReservations a potvrdi prihlaseni uzivatele.
+     * @return 
+     */
+    private static boolean userAuth() {
         String name;
         String surname;
         String email;
@@ -189,15 +253,15 @@ public class RESYapp {
 
         database.sortReservations();
         userReservations = database.getUserReservationsByCriteria(name, surname, idNumber, email);
-        
+
         if (userReservations != null) {
-            isLoggedAsAdmin = false; //zrusi pripadne prihlaseni admina
+            isLoggedAsAdmin = false;
             isLoggedAsUser = true; //potvrdi prihlaseni uzivatele
             uName = name;
             uSurname = surname;
             uID = idNumber;
             uEmail = email;
-            System.out.println("Rezervace nalezeny. Overeni uspesne.");
+            System.out.printf("Pocet nalezenych rezervaci: %d. Overeni uspesne.\n", userReservations.size());
             System.out.println("");
             return true;
         } else {
@@ -207,15 +271,18 @@ public class RESYapp {
         }
     }
 
-    public static boolean myReservationMenu() {
+    /**
+     * Spusti logiku menu Moje rezervace, ktera overenemu uzivateli umoznuje cist udaje o svych rezervacich, jejich ruseni a editaci.
+     * @return 
+     */
+    private static boolean myReservationMenu() {
         try {
             boolean exit = false;
-            int volba;
             while (!exit) {
                 printMyReservationMenu();
 
                 if (sc.hasNextInt()) {
-                    Reservation userReservation;
+                    Reservation userReservation; // Pro upravy zvolene rezervace
                     int choice = sc.nextInt();
                     sc.nextLine();
                     System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
@@ -229,6 +296,12 @@ public class RESYapp {
                             break;
                         case 2:
                             //export
+                            try{
+                                String nameOfExportedTextFile = database.exportDataToTextFile(userReservations);
+                                System.out.printf("Rezervace byly uspesne exportovany do souboru %s, ktery byl ulozen do stazenych souboru.\n", nameOfExportedTextFile);
+                            } catch (IOException e) {
+                                System.out.println(e.getMessage());
+                            }
                             break;
                         case 3:
                             //editace telefonniho cisla
@@ -236,17 +309,17 @@ public class RESYapp {
                             if (userReservation == null) {
                                 break;
                             }
-                            
+
                             String phoneNumber = enterPhoneNumber();
                             if (phoneNumber.equals("")) {
                                 break;
                             }
-                            
+
                             if (userReservation.setPhoneNumber(phoneNumber)) {
                                 System.out.println("Nove cislo bylo nastaveno.");
                                 try {
                                     database.saveAndOverwriteReservations();
-                                } catch (Exception e) {
+                                } catch (IOException e) {
                                     System.out.println("Chyba pri ukladani rezervaci: " + e.getMessage());
                                 }
                                 database.saveAndOverwriteReservations();
@@ -261,14 +334,14 @@ public class RESYapp {
                             if (userReservation == null) {
                                 break;
                             }
-                            
+
                             String note = enterNote();
-                            
+
                             if (userReservation.setNote(note)) {
                                 System.out.println("Poznamka byla zmenena.");
                                 try {
                                     database.saveAndOverwriteReservations();
-                                } catch (Exception e) {
+                                } catch (IOException e) {
                                     System.out.println("Chyba pri ukladani rezervaci: " + e.getMessage());
                                 }
                             } else {
@@ -282,9 +355,9 @@ public class RESYapp {
                             if (userReservation == null) {
                                 break;
                             }
-                            
+
                             int today = DateTools.toExcelFormat(LocalDate.now());
-                            
+
                             if (userReservation.getArrivalDate() < today & userReservation.getDepartureDate() < today) {
                                 System.out.println("Nelze smazat jiz probehlou rezervaci.");
                             } else if (userReservation.getArrivalDate() == today) {
@@ -295,10 +368,10 @@ public class RESYapp {
                                 database.removeReservation(userReservation);
                                 userReservations.remove(userReservation);
                                 userReservation = null;
-                                
+
                                 if (userReservations.isEmpty()) {
                                     System.out.println("Smazali jste vasi posledni rezervaci, system Vas odhlasi.");
-                                    userLogOff();
+                                    logOff();
                                     exit = true;
                                     break;
                                 }
@@ -307,32 +380,37 @@ public class RESYapp {
                             }
                             break;
                         case 6:
-                            userLogOff();
+                            logOff();
                             exit = true;
                             break;
                         case 0:
                             exit = true;
                             break;
                         default:
-
+                            System.out.println("Neplatna volba. Zvolte znovu.");
                             break;
                     }
 
                 } else {
                     System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
-                    String invalidInput = sc.nextLine();
+                    sc.nextLine();
                     System.out.println("Neplatna volba, zvolte znovu.");
                 }
 
                 System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
         }
         return true;
     }
     
-    public static Reservation validateUserReservation() {
+    /**
+     * Nacte od uzivatele cislo rezervace a najde podle nej uzivatelskou rezervaci v listu userReservations.
+     * Vrati objekt rezervace, pokud rezervace se zadanym cislem existuje a overeny uzivatel je jejim majitelem.
+     * @return 
+     */
+    private static Reservation validateUserReservation() {
         Reservation target;
         int reservationNumber = enterNumberOfReservation();
         if (reservationNumber == -1) {
@@ -351,23 +429,15 @@ public class RESYapp {
             System.out.println("Takova rezervace neexistuje nebo nemate pravo k jeji editaci.");
             return null;
         }
-        
+
         return target;
     }
 
-    public static boolean userLogOff() {
-        userReservations = null;
-        uName = null;
-        uSurname = null;
-        uID = null;
-        uEmail = null;
-        isLoggedAsUser = false;
-        isLoggedAsAdmin = false;
-        
-        return true;
-    }
-    
-    public static boolean adminLogin() {
+    /**
+     * Vyzve uzivatele k zadani hesla pro prihlaseni k administratorskemu uctu.
+     * @return 
+     */
+    private static boolean adminLogin() {
         //nejvic lidl prihlasovani na svete
         String passwd = "2023semestral";
         String input = "";
@@ -379,7 +449,7 @@ public class RESYapp {
         if (input.equals(passwd)) {
             System.out.println("Prihlaseni probehlo uspesne.");
             System.out.println("");
-            userLogOff();
+            logOff();
             isLoggedAsAdmin = true;
             return true;
         } else {
@@ -387,43 +457,64 @@ public class RESYapp {
             return false;
         }
     }
-
-    public static boolean adminMenu() {
+    
+    /**
+     * Spusti logiku administratorskeho menu, ktera umoznuje kompletni spravu ubytovani.
+     * @return 
+     */
+    private static boolean adminMenu() {
         try {
             boolean exit = false;
-            int volba;
             while (!exit) {
                 printAdminMenu();
 
                 if (sc.hasNextInt()) {
+                    int from = -1;
+                    int to = -1;
                     int choice = sc.nextInt();
                     sc.nextLine();
                     System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
 
                     switch (choice) {
                         case 1:
+                            //Vypsat vsechny rezervace
                             for (Reservation reservation : database.getReservations()) {
                                 System.out.println(reservation.toUserFriendlyString());
                             }
                             break;
                         case 2:
-                            for (Reservation reservation : database.getReservations()) {
-                                System.out.println(reservation.toString());
-                            }
-                            break;
-                        case 3:
+                            //Vypsat vsechny rezervace ve formatu CSV dat
                             for (Reservation reservation : database.getReservations()) {
                                 System.out.println(reservation.toCsvData());
                             }
                             break;
+                        case 3:
+                            //export vsech rezervaci
+                            try{
+                                String nameOfExportedTextFile = database.exportDataToTextFile(database.getReservations()); // ZEPTAT SE NA DEKLARACI
+                                System.out.printf("Rezervace byly uspesne exportovany do souboru %s, ktery byl ulozen do stazenych souboru.\n", nameOfExportedTextFile);
+                            } catch (IOException e) {
+                                System.out.println(e.getMessage());
+                            }
+                            break;
                         case 4:
+                            //export vsech rezervaci do bin souboru
+                            try{
+                                String nameOfExportedBinFile = database.exportDataToBinaryFile(database.getReservations());
+                                System.out.printf("Rezervace byly uspesne exportovany do souboru %s, ktery byl ulozen do stazenych souboru.\n", nameOfExportedBinFile);
+                            } catch (IOException e) {
+                                System.out.println(e.getMessage());
+                            }
+                            break;
+                        case 5:
+                            //Smazani libovolne rezervace
                             Reservation reservation;
                             System.out.println("Zadejte cislo rezervace ke smazani:");
                             ConsoleTools.input();
 
                             if (!sc.hasNextInt()) {
                                 System.out.println("Neplatne cislo rezervace.");
-                                return false;
+                                break;
                             }
 
                             int reservationNumber = sc.nextInt();
@@ -433,43 +524,94 @@ public class RESYapp {
 
                             try {
                                 reservation = database.getReservationByReservationNumber(reservationNumber);
-                            } catch (Exception e) {
-                                System.out.println("Doslo k chybe: " + e.getMessage());
+                                database.removeReservation(reservation);
+                                database.saveAndOverwriteReservations();
+                                System.out.printf("Rezervace %d byla uspesne smazana.\n", reservation.getReservationNumber());
+                                reservation = null;
+                            } catch (IllegalArgumentException e) {
+                                System.out.println(e.getMessage());
                                 break;
                             }
-
-                            database.removeReservation(reservation);
-                            database.saveAndOverwriteReservations();
-                            System.out.println("Rezervace byla uspesne smazana.");
-
                             break;
-                        case 5:
-                            isLoggedAsAdmin = false;
+                        case 6:
+                            //Vypsat zablokovane terminy
+                            for (BlockedDate blockedDate : database.getBlockedDates()) {
+                                System.out.println(blockedDate.toString());
+                            }
+                            break;
+
+                        case 7:
+                            //Zablokovat termin
+                            from = enterDateOfArrival(); // ZEPTAT SE NA DEKLARACI
+                            if (from < 0) {
+                                break;
+                            }
+                            to = enterDateOfDeparture();
+                            if (to < 0) {
+                                break;
+                            }
+                            
+                            try {
+                                if (!database.ableToBlock(from, to)) {
+                                    System.out.println("Zadany termin nelze zablokovat");
+                                    break;
+                                }
+                                database.createBlockedDate(from, to);
+                                System.out.println("Zadany termin uspesne zablokovan.");
+                            } catch (IllegalArgumentException e) {
+                                System.out.println("" + e.getMessage());
+                                break;
+                            }
+                            break;
+                        case 8:
+                            //Zrusit zablokovani terminu
+                            from = enterDateOfArrival();
+                            if (from < 0) {
+                                break;
+                            }
+                            try{
+                                BlockedDate target = database.getBlockedDateByStartingDate(from);
+                                database.removeBlockedDate(target);
+                                database.saveAndOverwriteBlockedDates();
+                                System.out.printf("Termin od %s do %s byl odblokovan.\n", DateTools.formatExcelDate(target.getStartingDate()), DateTools.formatExcelDate(target.getEndingDate()));
+                                target = null;
+                            } catch (IllegalArgumentException e) {
+                                System.out.println(e.getMessage());
+                                break;
+                            }
+                            
+                            break;
+                        case 9:
+                            logOff();
                             exit = true;
                             break;
                         case 0:
                             exit = true;
                             break;
                         default:
-
+                            System.out.println("Neplatna volba. Zvolte znovu.");
                             break;
                     }
 
                 } else {
                     System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
-                    String invalidInput = sc.nextLine();
+                    sc.nextLine();
                     System.out.println("Neplatna volba, zvolte znovu.");
                 }
 
                 System.out.println(""); // Prazdny radek pro oddeleni mezi volbami
             }
-        } catch (Exception e) {
+        } catch (IOException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
         }
         return true;
     }
 
-    public static boolean availabilityCheck() {
+    /**
+     * Nacte od uzivatele datum prijezdu a odjezdu a zkontroluje dostupnost.
+     * @return 
+     */
+    private static boolean availabilityCheck() {
 
         int from = enterDateOfArrival();
         if (from < 0) {
@@ -488,14 +630,20 @@ public class RESYapp {
             }
             System.out.println("Zadany termin je volny");
             return true;
-        } catch (Exception e) {
-            System.out.println("Doslo k chybe: " + e.getMessage());
+        } catch (IllegalArgumentException e) {
+            System.out.println("" + e.getMessage());
             return false;
         }
 
     }
-
-    public static boolean createReservation() {
+    
+    /**
+     * Spusti proces vytvareni rezervace. Pomoci podpurnych metod nacte od uzivatele data a zkontroluje dostupnost terminu. 
+     * Pokud je termin volny, tak automaticky vygeneruje cislo rezervace a vytvori rezervaci.
+     * Po uspesnem vytvoreni rezervace vyhleda dalsi uzivatelovi rezervace a uzivatele overi pro jejich zobrazeni a editaci.
+     * @return 
+     */
+    private static boolean createReservation() {
         try {
             int arrival, departure, reservationNumber, numberOfGuests, birthDate;
             int price = 0;
@@ -510,9 +658,17 @@ public class RESYapp {
             if (departure < 0) {
                 return false;
             }
+            
+            database.sortReservations();
 
-            if (!database.isBookable(arrival, departure)) {
-                System.out.println("Zadany termin neni volny");
+            try {
+                if (!database.isBookable(arrival, departure)) {
+                    System.out.println("Zadany termin neni volny");
+                    return false;
+                }
+                System.out.println("Zadany termin je volny");
+            } catch (IllegalArgumentException e) {
+                System.out.println("" + e.getMessage());
                 return false;
             }
 
@@ -571,36 +727,65 @@ public class RESYapp {
             System.out.printf("Rezervace cislo %d byla vytvorena.\n", reservationNumber);
 
             if (!isLoggedAsAdmin) {
-                isLoggedAsUser = true;
-//                userReservations = database.getReservationByReservationNumber(reservationNumber);
+                logOff();
+                userReservations = database.getUserReservationsByCriteria(firstName, lastName, idNumber, email);
+                isLoggedAsUser = true; //potvrdi prihlaseni uzivatele
+                uName = firstName;
+                uSurname = lastName;
+                uID = idNumber;
+                uEmail = email;
             }
 
             database.saveAndOverwriteReservations();
-        } catch (Exception e) {
+        } catch (IOException | IllegalArgumentException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
         }
         return true;
     }
 
+    /**
+     * Odhlasi uzivatele nebo admina. Vsechny promenne o uzivateli nastavi na null.
+     * @return
+     */
+    private static boolean logOff() {
+        userReservations = null;
+        uName = null;
+        uSurname = null;
+        uID = null;
+        uEmail = null;
+        isLoggedAsUser = false;
+        isLoggedAsAdmin = false;
+
+        return true;
+    }
+
     //nacitani dat od uzivatele ------------------------------------------------
     
-    public static int enterNumberOfReservation() {
+    /**
+     * Nacte od uzivatele cislo rezervace pro potreby vyhledavani rezervaci a vrati jej jako String.
+     * @return 
+     */
+    private static int enterNumberOfReservation() {
         int reservationNumber = 0;
-        
+
         System.out.println("Zadejte cislo rezervace:");
         ConsoleTools.input();
         if (!sc.hasNextInt() || reservationNumber < 0) {
             System.out.println("Neocekavany znak.");
             return -1;
         }
-        
+
         reservationNumber = sc.nextInt();
         sc.nextLine();
-        
+
         return reservationNumber;
     }
-    
-    public static int enterDateOfArrival() {
+
+    /**
+     * Nacte od uzivatele datum prijezdu, zkontroluje validitu a vrati jej jako integer v Excel formatu.
+     * @return 
+     */
+    private static int enterDateOfArrival() {
         String input = "";
         int from;
         int today = DateTools.toExcelFormat(LocalDate.now());
@@ -616,7 +801,7 @@ public class RESYapp {
         }
         try {
             from = DateTools.toExcelFormat(Integer.parseInt(inputFrom[0]), Integer.parseInt(inputFrom[1]), Integer.parseInt(inputFrom[2]));
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
             return -1;
         }
@@ -624,13 +809,17 @@ public class RESYapp {
             System.out.println("Datum prijezdu nemuze byt v minulosti.");
             return -1;
         } else if (from > endOfBooking) {
-            System.out.println("Rezervovat lze pouze do " + DateTools.toLocalDateFormat(endOfBooking).format(formatter));
+            System.out.println("Nelze pracovat s rezervacemi po " + DateTools.toLocalDateFormat(endOfBooking).format(formatter) + ".");
             return -1;
         }
         return from;
     }
 
-    public static int enterDateOfDeparture() {
+    /**
+     * Nacte od uzivatele datum odjezdu, zkontroluje validitu a vrati jej jako integer v Excel formatu.
+     * @return 
+     */
+    private static int enterDateOfDeparture() {
         String input = "";
         int to;
         int today = DateTools.toExcelFormat(LocalDate.now());
@@ -646,7 +835,7 @@ public class RESYapp {
         }
         try {
             to = DateTools.toExcelFormat(Integer.parseInt(inputTo[0]), Integer.parseInt(inputTo[1]), Integer.parseInt(inputTo[2]));
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
             return -1;
         }
@@ -659,8 +848,12 @@ public class RESYapp {
         }
         return to;
     }
-
-    public static int enterNumberOfGuests() {
+    
+    /**
+     * Nacte od uzivatele pocet hostu, zkontroluje zda zadal validni pocet a vrati jej jako integer.
+     * @return 
+     */
+    private static int enterNumberOfGuests() {
         int noOfGuests;
 
         System.out.println("Zadejte pocet hostu (1-4):");
@@ -681,7 +874,11 @@ public class RESYapp {
         return noOfGuests;
     }
 
-    public static String enterName() {
+    /**
+     * Nacte od uzivatele jmeno, zkontroluje validitu a vrati jej jako String.
+     * @return 
+     */
+    private static String enterName() {
         String name = "";
 
         System.out.println("Zadejte svoje krestni jmeno:");
@@ -695,8 +892,12 @@ public class RESYapp {
 
         return name;
     }
-
-    public static String enterSurname() {
+    
+    /**
+     * Nacte od uzivatele prijmeni, zkontroluje validitu a vrati jej jako String.
+     * @return 
+     */
+    private static String enterSurname() {
         String surname = "";
 
         System.out.println("Zadejte svoje prijmeni:");
@@ -711,7 +912,11 @@ public class RESYapp {
         return surname;
     }
 
-    public static String enterID() {
+    /**
+     * Nacte od uzivatele cislo OP/ridicaku/pasu, zkontroluje validitu a vrati jej jako String.
+     * @return 
+     */
+    private static String enterID() {
         String idNumber = "";
 
         System.out.println("Zadejte ID dokladu (OP/pas/ridicak):");
@@ -727,7 +932,11 @@ public class RESYapp {
         return idNumber;
     }
 
-    public static int enterBirthDate() {
+    /**
+     * Nacte od uzivatele datum narozeni, zkontroluje jeho validitu a vrati jej jako integer v Excel formatu.
+     * @return 
+     */
+    private static int enterBirthDate() {
         String input = "";
         int today = DateTools.toExcelFormat(LocalDate.now());
         int ageLimit = today - (18 * 365);
@@ -744,7 +953,7 @@ public class RESYapp {
         }
         try {
             birthDate = DateTools.toExcelFormat(Integer.parseInt(inputFrom[0]), Integer.parseInt(inputFrom[1]), Integer.parseInt(inputFrom[2]));
-        } catch (Exception e) {
+        } catch (IllegalArgumentException e) {
             System.out.println("Doslo k chybe: " + e.getMessage());
             return -1;
         }
@@ -759,7 +968,11 @@ public class RESYapp {
         return birthDate;
     }
 
-    public static String enterEmail() {
+    /**
+     * Nacte od uzivatele email, zkontroluje jeho validitu a vrati jej jako String.
+     * @return 
+     */
+    private static String enterEmail() {
         String email = "";
 
         System.out.println("Zadejte vas email:");
@@ -774,7 +987,11 @@ public class RESYapp {
         return email;
     }
 
-    public static String enterPhoneNumber() {
+    /**
+     * Nacte od uzivatele telefonni cislo, zkontroluje validitu a vrati jej jako String.
+     * @return 
+     */
+    private static String enterPhoneNumber() {
         String phoneNumber = "";
 
         System.out.println("Zadejte vase telefonni cislo:");
@@ -789,12 +1006,16 @@ public class RESYapp {
         return phoneNumber;
     }
 
-    public static String enterNote() {
+    /**
+     * Nacte od uzivatele String a vrati ho.
+     * @return
+     */
+    private static String enterNote() {
         String note = "";
 
         System.out.println("Zadejte volitelnou poznamku k vasi rezervaci:");
         ConsoleTools.input();
-        note = sc.nextLine().trim();
+        note = sc.nextLine().trim().replaceAll(",", "");
 
         return note;
     }
